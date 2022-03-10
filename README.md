@@ -5,7 +5,7 @@
     - [GitHub material](https://github.com/eazybytes/spring-security)
     - [slides](./docs/Spring+Security+Zero+to+Master+along+with+JWT,OAUTH2.pdf)
 
-## spring security basics
+## section 1: spring security basics
 In pom.xml
 ```xml
 <dependencies>
@@ -18,7 +18,7 @@ In pom.xml
 ```
 
 ### default account
-[link](./spring-security/section1/springsecuritybasic/src/main/resources/application.properties)
+[link](./spring-security-code/section1/springsecuritybasic/src/main/resources/application.properties)
 
 ### multiple requests without crediential by spring-security
 - without auth:  
@@ -39,4 +39,4 @@ In pom.xml
 6. PasswordEncoder: Service interface for encoding passwords
 7. SecurityContext: Interface defining the minimum security information associated with the current thread of execution It holds the authentication data post successful authentication **<u>(stores the details of the currently authenticated user inside Spring Security framework)</u>**
 
-
+## section 2: changing the default secuirty configurations
