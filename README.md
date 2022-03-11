@@ -178,6 +178,40 @@ In pom.xml
       }
       ```
 
+## section 4: Password Management with PasswordEncoders
+### PasswordEncoder
+```java
+public interface PasswordEncoder {
+
+	/**
+	 * Encode the raw password. such as SHA-1
+	 */
+	String encode(CharSequence rawPassword);
+
+	/**
+	 * Verify the encoded password obtained from storage matches the submitted raw
+	 * password after it too is encoded. Returns true if the passwords match, false if
+	 * they do not. The stored password itself is never decoded.
+	 */
+	boolean matches(CharSequence rawPassword, String encodedPassword);
+
+	/**
+	 * Returns true if the encoded password should be encoded again for better security,
+	 * else false. The default implementation always returns false.
+	 */
+	default boolean upgradeEncoding(String encodedPassword) {
+		return false;
+	}
+}
+```
+- Different Implementations of PasswordEncoders
+    - NoOpPasswordEncoder
+    - StandardPasswordEncoder
+    - Pbkdf 2 PasswordEncoder
+    - BCryptPasswordEncoder
+    - SCryptPasswordEncoder
+
+
 
 
 
