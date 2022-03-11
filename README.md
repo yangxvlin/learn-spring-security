@@ -46,7 +46,7 @@ In pom.xml
 7. SecurityContext: 
     - Interface defining the minimum security information associated with the current thread of execution It holds the authentication data post successful authentication **<u>(stores the details of the currently authenticated user inside Spring Security framework)</u>**
 
-## section 2: changing the default secuirty configurations
+## section 2: changing the default security configurations
 - Services with out any security
     - /contact
         - This service should accept the details from the Contact Us page in the UI and save to the DB.
@@ -61,6 +61,7 @@ In pom.xml
         - This service should send the loan details of the logged in user from the DB to the UI
     - /myCards
         - This service should send the card details of the logged in user from the DB to the UI
+### configure API access
 - default behavior:
     - authenticate all methods for all users
 - configure above security permission: [ProjectSecurityConfig.java](./spring-security-code\section2\springsecsection2\src\main\java\com\eazybytes\config\ProjectSecurityConfig.java)
@@ -81,5 +82,56 @@ In pom.xml
         .httpBasic();
     ```
 
+## section 3: Defining & Managing Users
+### configure users accounts + authorization rules
+- 所有信息都存在内存里
 
+- `inMemoryAuthentication()`
+    - ```java
+      @Configuration
+      public class ProjectSecurityConfig extends WebSecurityConfigurerAdapter {
+          @Override
+          protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+              auth.inMemoryAuthentication()
+                      .withUser("admin").password("12345").authorities("admin").and()
+                      .withUser("user").password("12345").authorities("read").and()
+                      .passwordEncoder(NoOpPasswordEncoder.getInstance());
+          }
+      }
+      ```
+    
+- `InMemoryUserDetailsManager`
+    - ```java
+      @Configuration
+      public class ProjectSecurityConfig extends WebSecurityConfigurerAdapter {
+          @Override
+          protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+              InMemoryUserDetailsManager userDetailsService = new InMemoryUserDetailsManager();
+              UserDetails user  = User.withUsername("admin").password("12345").authorities("admin").build();
+              UserDetails user1 = User.withUsername("user" ).password("12345").authorities("read" ).build();
+              userDetailsService.createUser(user);
+              userDetailsService.createUser(user1);
+              auth.userDetailsService(userDetailsService);
+          }
+          // As we do not have a PasswordEncoder as above has, we need to configure it here for       InMemoryUserDetailsManager
+          @Bean
+          public PasswordEncoder passwordEncoder() {
+              return NoOpPasswordEncoder.getInstance();
+          }
+      }
+      ```
+
+### important User Management related classes
+- <img src="./imgs/5.png" width="70%"/>
+- `interface UserDetails`
+    - provides core user information inside Spring Security framework
+    - `class User implements UserDetails`
+        - simple representation of `UserDetails` provided by spring security
+- `interface UserDetailsService`
+    - only search
+    - `interface UserDetailsManager extends UserDetailsService`
+        - create/delete/update/select enabled
+- `UserDetailsManager`'s implementation
+    - `InMemoryUserDetailsManager`: stores `User` by a HashMap in the memory 
+    - `JdbcUserDetailsManager`: stores in DB
 
