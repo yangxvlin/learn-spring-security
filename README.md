@@ -123,6 +123,8 @@ In pom.xml
 
 ### important User Management related classes
 - <img src="./imgs/5.png" width="70%"/>
+    
+    > Note: UserDetailService should not has the arrow to UserDetails
 - `interface UserDetails`
     - provides core user information inside Spring Security framework
     - `class User implements UserDetails`
@@ -134,4 +136,48 @@ In pom.xml
 - `UserDetailsManager`'s implementation
     - `InMemoryUserDetailsManager`: stores `User` by a HashMap in the memory 
     - `JdbcUserDetailsManager`: stores in DB
+
+### Implement customized UserDetailsService
+- Service: extend UserDetailsService
+    - ```java
+      @Service
+      public class EazyBankUserDetails implements UserDetailsService {
+          @Autowired
+          private CustomerRepository customerRepository;
+
+          @Override
+          public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+              List<Customer> customer = customerRepository.findByEmail(username);
+              if (customer.size() == 0) {
+                  throw new UsernameNotFoundException("User details not found for the user : " + username);
+              }
+              return new SecurityCustomer(customer.get(0));
+          }
+      }
+      ```
+    - need to set the userDetailService to AuthenticationManagerBuilder
+- Repository:
+    - ```java
+      @Repository
+      public interface CustomerRepository extends CrudRepository<Customer, Long> {
+          List<Customer> findByEmail(String email);
+      }
+      ```
+- Dao: implements UserDetails
+    - ```java
+      public class SecurityCustomer implements UserDetails {
+          private static final long serialVersionUID = -6690946490872875352L;
+  
+          private final Customer customer;
+  
+          public SecurityCustomer(Customer customer) {
+              this.customer = customer;
+          }
+  
+          ...
+      }
+      ```
+
+
+
 
