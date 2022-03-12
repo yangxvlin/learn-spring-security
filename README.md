@@ -207,7 +207,7 @@ public interface PasswordEncoder {
 - Different Implementations of PasswordEncoders
     - NoOpPasswordEncoder
     - StandardPasswordEncoder
-    - Pbkdf 2 PasswordEncoder
+    - PbkdfPasswordEncoder
     - BCryptPasswordEncoder
     - SCryptPasswordEncoder
 
