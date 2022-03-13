@@ -1,5 +1,23 @@
 # learn-spring-security
+<!-- TOC -->
 
+- [learn-spring-security](#learn-spring-security)
+    - [resource](#resource)
+    - [section 1: spring security basics](#section-1-spring-security-basics)
+        - [default account](#default-account)
+        - [multiple requests without crediential by spring-security](#multiple-requests-without-crediential-by-spring-security)
+        - [spring securith flow](#spring-securith-flow)
+    - [section 2: changing the default security configurations](#section-2-changing-the-default-security-configurations)
+        - [configure API access](#configure-api-access)
+    - [section 3: Defining & Managing Users](#section-3-defining--managing-users)
+        - [configure users accounts + authorization rules](#configure-users-accounts--authorization-rules)
+        - [important User Management related classes](#important-user-management-related-classes)
+        - [Implement customized UserDetailsService](#implement-customized-userdetailsservice)
+    - [section 4: Password Management with PasswordEncoders](#section-4-password-management-with-passwordencoders)
+        - [PasswordEncoder](#passwordencoder)
+    - [section 5: Understanding Authentication Provider and Implementing it](#section-5-understanding-authentication-provider-and-implementing-it)
+
+<!-- /TOC -->
 ## resource
 - [udemy course](https://www.udemy.com/course/spring-security-zero-to-master/)
     - [GitHub material](https://github.com/eazybytes/spring-security)
@@ -205,13 +223,83 @@ public interface PasswordEncoder {
 }
 ```
 - Different Implementations of PasswordEncoders
-    - NoOpPasswordEncoder
-    - StandardPasswordEncoder
+    - NoOpPasswordEncoder (not practical)
+        - no encode operation, just using raw input password string
+    - StandardPasswordEncoder (not practical)
+        - encode with SHA256 + 8 bytes salt
     - PbkdfPasswordEncoder
+        - better security level compared to above, but can be slow depending on the inputs
     - BCryptPasswordEncoder
+        - users can choose diferent versions of encoding has function for different security level as well as security strength from 4-31
     - SCryptPasswordEncoder
+        - users can specify the CPU, memory, GPU difficulty for the attacker
 
+## section 5: Understanding Authentication Provider and Implementing it
+```java
+public interface AuthenticationProvider {
+	/**
+	 * receives an Authentication object as a parameter and returns an Authentication object as well. We implement the authenticate() method to define the authentication logic
+	 */
+	Authentication authenticate(Authentication authentication)
+			throws AuthenticationException;
 
+	/**
+	 * You’ll implement this method to return true if the current AuthenticationProvider supports the type provided as the Authentication object
+	 */
+	boolean supports(Class<?> authentication);
+}
+```
 
+```java
+public interface AuthenticationManager {
+	Authentication authenticate(Authentication authentication)
+			throws AuthenticationException;
+}
+```
 
+The difference is the `supports(...)` method. It can be used for multiple auth functionality. `AuthenticationProvider` performs the real authentication logic. `AuthenticationManager` delegates authentication object to the Provider.
+
+```java
+public class ProviderManager implements AuthenticationManager, MessageSourceAware, InitializingBean {
+
+    ...
+
+    public Authentication authenticate(Authentication authentication)
+			throws AuthenticationException {
+		Class<? extends Authentication> toTest = authentication.getClass();
+		AuthenticationException lastException = null;
+		AuthenticationException parentException = null;
+		Authentication result = null;
+		Authentication parentResult = null;
+		boolean debug = logger.isDebugEnabled();
+
+		for (AuthenticationProvider provider : getProviders()) {
+			if (!provider.supports(toTest)) {
+				continue;
+			}
+
+			if (debug) {
+				logger.debug("Authentication attempt using "
+						+ provider.getClass().getName());
+			}
+
+			try {
+				result = provider.authenticate(authentication);
+
+				if (result != null) {
+					copyDetails(authentication, result);
+					break;
+				}
+			}
+
+        ...
+    
+    }
+
+    ...
+
+}
+```
+
+The `ProviderManager` implements `ProviderManager`. In the `authenticate()` method, it selects the provider that can support the authentication object and delegate the authenticate operation to the `AuthenticationProvider`.
 
