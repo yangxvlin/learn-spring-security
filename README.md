@@ -235,6 +235,7 @@ public interface PasswordEncoder {
         - users can specify the CPU, memory, GPU difficulty for the attacker
 
 ## section 5: Understanding Authentication Provider and Implementing it
+### AuthenticationProvider interface and its implementation
 ```java
 public interface AuthenticationProvider {
 	/**
@@ -250,6 +251,102 @@ public interface AuthenticationProvider {
 }
 ```
 
+```java
+public abstract class AbstractUserDetailsAuthenticationProvider implements
+		AuthenticationProvider, InitializingBean, MessageSourceAware {
+
+    ...
+
+    public Authentication authenticate(Authentication authentication)
+			throws AuthenticationException {
+        1. get username = authentication.getName();
+        2. try to get UserDetails from cache
+        3. if get from cache fail, retrieveUser(username, authentication); // by child class implementation
+        4. pre, additional, post authentication check
+        5. update cache if not using cache
+        6. return createSuccessAuthentication(principalToReturn [UserDetails or UserDetails.toString()], authentication, user);
+    }
+
+    ...
+
+    protected Authentication createSuccessAuthentication(Object principal,
+			Authentication authentication, UserDetails user) {
+		// Ensure we return the original credentials the user supplied,
+		// so subsequent attempts are successful even with encoded passwords.
+		// Also ensure we return the original getDetails(), so that future
+		// authentication events after cache expiry contain the details
+		UsernamePasswordAuthenticationToken result = new UsernamePasswordAuthenticationToken(
+				principal, authentication.getCredentials(),
+				authoritiesMapper.mapAuthorities(user.getAuthorities()));
+		result.setDetails(authentication.getDetails());
+
+		return result;
+	}
+
+    ...
+}
+```
+
+```java
+public class DaoAuthenticationProvider extends AbstractUserDetailsAuthenticationProvider {
+
+    ...
+
+    // encode password in the storage
+    @Override
+	protected Authentication createSuccessAuthentication(Object principal,
+			Authentication authentication, UserDetails user) {
+		boolean upgradeEncoding = this.userDetailsPasswordService != null
+				&& this.passwordEncoder.upgradeEncoding(user.getPassword());
+		if (upgradeEncoding) {
+			String presentedPassword = authentication.getCredentials().toString();
+			String newPassword = this.passwordEncoder.encode(presentedPassword);
+			user = this.userDetailsPasswordService.updatePassword(user, newPassword); // InMemoryUserDetailsManager.updatePassword
+		}
+		return super.createSuccessAuthentication(principal, authentication, user);
+	}
+
+    ...
+}
+```
+
+### customized AuthenticationProvider
+```java
+@Component
+public class EazyBankUsernamePwdAuthenticationProvider implements AuthenticationProvider {
+
+	@Autowired
+	private CustomerRepository customerRepository;
+	
+	@Autowired
+	private PasswordEncoder passwordEncoder;
+
+	@Override
+	public Authentication authenticate(Authentication authentication) {
+		String username = authentication.getName();
+		String pwd = authentication.getCredentials().toString();
+		List<Customer> customer = customerRepository.findByEmail(username);
+		if (customer.size() > 0) {
+			if (passwordEncoder.matches(pwd, customer.get(0).getPwd())) {
+				List<GrantedAuthority> authorities = new ArrayList<>();
+				authorities.add(new SimpleGrantedAuthority(customer.get(0).getRole()));
+				return new UsernamePasswordAuthenticationToken(username, pwd, authorities);
+			} else {
+				throw new BadCredentialsException("Invalid password!");
+			}
+		}else {
+			throw new BadCredentialsException("No user registered with this details!");
+		}
+	}
+
+	@Override
+	public boolean supports(Class<?> authenticationType) {
+		return authenticationType.equals(UsernamePasswordAuthenticationToken.class);
+	}
+}
+```
+
+### AuthenticationManager interface and its implementation
 ```java
 public interface AuthenticationManager {
 	Authentication authenticate(Authentication authentication)
@@ -302,4 +399,61 @@ public class ProviderManager implements AuthenticationManager, MessageSourceAwar
 ```
 
 The `ProviderManager` implements `ProviderManager`. In the `authenticate()` method, it selects the provider that can support the authentication object and delegate the authenticate operation to the `AuthenticationProvider`.
+
+### Principal & Authentication interface
+
+```java
+// represent an entity (abstraction of a principal), such as an individual, a corporation, a login id
+public interface Principal {
+    public boolean equals(Object another);
+    public String toString();
+    public int hashCode();
+    public String getName();
+
+    public default boolean implies(Subject subject) {
+        if (subject == null)
+            return false;
+        return subject.getPrincipals().contains(this);
+    }
+}
+
+// Represents the token for an authentication request or for an authenticated principal once the request has been processed by the {@link AuthenticationManager#authenticate(Authentication)} method.
+public interface Authentication extends Principal, Serializable {
+	/**
+	 * Set by an <code>AuthenticationManager</code> to indicate the authorities that the
+	 * principal has been granted.
+	 *
+	 * @return the authorities granted to the principal, or an empty collection if the
+	 * token has not been authenticated. Never null.
+	 */
+	Collection<? extends GrantedAuthority> getAuthorities();
+
+	/**
+	 * The credentials that prove the principal is correct. This is usually a password,
+	 * but could be anything relevant to the <code>AuthenticationManager</code>.
+	 */
+	Object getCredentials();
+
+	/**
+	 * @return additional details about the authentication request, or <code>null</code>
+	 * if not used
+	 */
+	Object getDetails();
+
+	/**
+	 * @return the <code>Principal</code> being authenticated or the authenticated
+	 * principal after authentication.
+	 */
+	Object getPrincipal();
+
+	/**
+	 * @return true if the token has been authenticated and the
+	 * <code>AbstractSecurityInterceptor</code> does not need to present the token to the
+	 * <code>AuthenticationManager</code> again for re-authentication.
+	 */
+	boolean isAuthenticated();
+	void setAuthenticated(boolean isAuthenticated) throws IllegalArgumentException;
+}
+```
+
 
