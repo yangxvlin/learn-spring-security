@@ -456,4 +456,87 @@ public interface Authentication extends Principal, Serializable {
 }
 ```
 
+## section 06: CORS & CSRF
+### CROSS ORIGIN RESOURCE SHARING (CORS)
+
+- A protocol that enables scripts running on a browser client to interact with resources from a different origin.
+
+- "other origins": the URL accessed is different to the location that the JavaScript is running, such as:
+    - a different scheme (HTTP or HTTPS)
+    - a different domain
+    - a different port
+- <img src="./imgs/6.png" width="90%"/>
+
+#### How to enable CORS?
+- configure the server to support it.
+- Include some headers for web browser to do a preflight to verify the server supports CORS with response headers:
+    - |||
+      |---|---|
+      |Access Control Allow Origin|Defines which origins may have access to the resource. A ‘*' represents any origin
+      |Access Control Allow Methods|Indicates the allowed HTTP methods for cross-origin requests
+      |Access Control Allow Headers|Indicates the allowed request headers for cross-origin requests
+      |Access Control Allow Credentials |Indicates whether or not the response to the request can be exposed when the credentials flag is true
+      |Access Control Max Age|Defines the expiration time of the result of the cached preflight request
+- <img src="./imgs/7.png" width="90%"/>
+- ```java
+  @Configuration
+  public class ProjectSecurityConfig extends WebSecurityConfigurerAdapter {
+      @Override
+      protected void configure(HttpSecurity http) throws Exception {
+          // configure CORS on the server side
+          http.cors().configurationSource(new CorsConfigurationSource() {
+              @Override
+              public CorsConfiguration getCorsConfiguration(HttpServletRequest request) {
+                  CorsConfiguration config = new CorsConfiguration();
+                  config.setAllowedOrigins(Collections.singletonList("http://localhost:4200"));
+                  config.setAllowedMethods(Collections.singletonList("*"));
+                  config.setAllowCredentials(true);
+                  config.setAllowedHeaders(Collections.singletonList("*"));
+                  config.setMaxAge(3600L);
+                  return config;
+              }
+          })...;
+      }
+  ```
+
+
+### CROSS SITE REQUEST FORGERY (CSRF)
+- An attack aims to perform an operation in a web application on behalf of a user without their explicit consent. In general, it doesn't directly steal the user's identity, but it exploits the user to carry out an action without their will.
+
+- <img src="./imgs/8.png" width="70%"/>
+    
+    - The attacker cheat the user on the fake website that a submission is safe while it actually use user's crediential to send a change password post request to the actual website. 
+#### How to defend CSRF?
+- use CSRF tokens sent by the user
+- <img src="./imgs/7.png" width="90%"/>
+- ```java
+  @Configuration
+  public class ProjectSecurityConfig extends WebSecurityConfigurerAdapter {
+      @Override
+      protected void configure(HttpSecurity http) throws Exception {
+          // configure CORS privacy on the server side
+          http.cors().configurationSource(new CorsConfigurationSource() {
+              @Override
+              public CorsConfiguration getCorsConfiguration(HttpServletRequest request) {
+                  CorsConfiguration config = new CorsConfiguration();
+                  config.setAllowedOrigins(Collections.singletonList("http://localhost:4200"));
+                  config.setAllowedMethods(Collections.singletonList("*"));
+                  config.setAllowCredentials(true);
+                  config.setAllowedHeaders(Collections.singletonList("*"));
+                  config.setMaxAge(3600L);
+                  return config;
+              }
+          }).and()
+          // enable CSRF token on the server side to save the token in the user cookie
+          .csrf().ignoringAntMatchers("/contact").csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()).and().;
+          // ignore CSRF token for "/contact"
+          // CookieCsrfTokenRepository.withHttpOnlyFalse() is for angular only
+
+          // static final String DEFAULT_CSRF_COOKIE_NAME = "XSRF-TOKEN";
+          // static final String DEFAULT_CSRF_HEADER_NAME = "X-XSRF-TOKEN";
+      }
+  ```
+
+
+
 
