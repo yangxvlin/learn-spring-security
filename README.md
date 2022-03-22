@@ -748,4 +748,146 @@ public class ProjectSecurityConfig extends WebSecurityConfigurerAdapter {
 <br/>antMatchers("/secured") matches : /secured
 <br/>mvcMatchers("/secured") matches : /secured as well as /secured/, /secured.html, /secured.xyz
 
+## section 08: filters in Spring Security
+- A filter is a component which receives requests, process its logic and handover to the next filter in the chain.
+- Spring Security is based on a chain of servlet filters. 
+    - Each filter has a specific responsibility and depending on the configuration, filters are added or removed. We can add our custom filters as well based on the need.
+### Enable filter debug mode
+1. @EnableWebSecurity(debug = true) on the SpringApplication class. 
+    - We need to enable the debugging of the security details
+2. Enable logging of the details by adding the below property in `application.properties`
+    - logging.level.org.springframework.security.web.FilterChainProxy=DEBUG
+
+### default filter chain for spring security authentication flow
+- <img src="./imgs/10.png" width="30%"/>
+
+### customized filter
+```java
+public interface Filter {
+    ...
+
+    public void doFilter(ServletRequest request, 
+                         ServletResponse response,
+                         FilterChain chain) throws IOException, ServletException;
+
+    ...
+}
+```
+
+|doFilter() parameters||
+|---|---|
+|ServletRequest|represents the HTTP request. We use the ServletRequest object to retrieve details about the request from the client.
+|ServletResponse|represents the HTTP response. We use the ServletResponse object to modify the response before sending it back to the client or further along the filter chain.
+|FilterChain|The filter chain represents a collection of filters with a defined order in which they act. We use the FilterChain object to forward the request to the next filter in the chain.
+
+### configure the filter order in the filter chain
+
+
+- addFilterBefore (filter, class) adds a filter before the position of the specified filter class
+- addFilterAfter (filter, class) adds a filter after the position of the specified filter class
+- addFilterAt (filter, class) adds a filter at the location of the specified filter class
+    - But the order of the execution can’t be guaranteed. This will not replace the filters already present at the same order. Since we will not have control on the order of the filters and it is random in nature we should avoid providing the filters at same order.
+    - <img src="./imgs/11.png" width="70%"/>
+
+### other builtin filter
+```java
+public abstract class GenericFilterBean implements Filter, BeanNameAware, EnvironmentAware,
+		EnvironmentCapable, ServletContextAware, InitializingBean, DisposableBean {
+    ...
+}
+```
+- This is an abstract class filter bean which allows you to use the initialization parameters and configurations done inside the web.xml
+
+```java
+public abstract class OncePerRequestFilter extends GenericFilterBean {
+    ...
+
+    /**
+	 * Same contract as for {@code doFilter}, but guaranteed to be
+	 * just invoked once per request within a single request thread.
+	 * See {@link #shouldNotFilterAsyncDispatch()} for details.
+	 */
+	protected abstract void doFilterInternal(
+			HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+			throws ServletException, IOException;
+    
+    ...
+}
+```
+- Spring doesn't guarantee that your filter will be called only once.But if we have a scenario where we need to make sure to execute our filter only once then we can use this.
+
+For example:
+```java
+/**
+ * A {@link Filter} that performs authentication of a particular request. An
+ * outline of the logic:
+ *
+ * 1. A request comes in and if it does not match {@link #setRequestMatcher(RequestMatcher)}, then this filter does nothing and the {@link FilterChain} is continued. 
+ *      If it does match then...
+ * 2. An attempt to convert the {@link HttpServletRequest} into an {@link Authentication} is made. If the result is empty, then the filter does nothing more and the {@link FilterChain} is continued. 
+ *      If it does create an {@link Authentication}...
+ * 3. The {@link AuthenticationManager} specified in {@link #GenericAuthenticationFilter(AuthenticationManager)} is used to perform authentication.
+ * 4. The {@link AuthenticationManagerResolver} specified in {@link #GenericAuthenticationFilter(AuthenticationManagerResolver)} is used to resolve the appropriate authentication manager from context to perform authentication.
+ * 5. If authentication is successful, {@link AuthenticationSuccessHandler} is invoked and the authentication is set on {@link SecurityContextHolder}, else {@link AuthenticationFailureHandler} is invoked
+ */
+public class AuthenticationFilter extends OncePerRequestFilter {
+    ...
+
+    @Override
+	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+			throws ServletException, IOException {
+        // 1.
+		if (!this.requestMatcher.matches(request)) {
+			filterChain.doFilter(request, response);
+			return;
+		}
+
+		try {
+            // 2.
+            // 3. is performed inside `attemptAuthentication(request, response);`
+            // 4.
+			Authentication authenticationResult = attemptAuthentication(request, response);
+			if (authenticationResult == null) {
+				filterChain.doFilter(request, response);
+				return;
+			}
+
+			HttpSession session = request.getSession(false);
+			if (session != null) {
+				request.changeSessionId();
+			}
+
+            // 5.
+			successfulAuthentication(request, response, filterChain, authenticationResult);
+		} catch (AuthenticationException e) {
+			unsuccessfulAuthentication(request, response, e);
+		}
+	}
+
+    private Authentication attemptAuthentication(HttpServletRequest request, HttpServletResponse response)
+			throws AuthenticationException, ServletException {
+        // 2. 
+		Authentication authentication = this.authenticationConverter.convert(request);
+		if (authentication == null) {
+			return null;
+		}
+
+        // 4.
+		AuthenticationManager authenticationManager = this.authenticationManagerResolver.resolve(request);
+        // 3.
+		Authentication authenticationResult = authenticationManager.authenticate(authentication);
+		if (authenticationResult == null) {
+			throw new ServletException("AuthenticationManager should not return null Authentication object.");
+		}
+
+		return authenticationResult;
+	}
+
+    ...
+}
+```
+
+
+
+
 
