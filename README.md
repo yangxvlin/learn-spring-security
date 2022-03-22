@@ -508,7 +508,6 @@ public interface Authentication extends Principal, Serializable {
     - The attacker cheat the user on the fake website that a submission is safe while it actually use user's crediential to send a change password post request to the actual website. 
 #### How to defend CSRF?
 - use CSRF tokens sent by the user
-- <img src="./imgs/7.png" width="90%"/>
 - ```java
   @Configuration
   public class ProjectSecurityConfig extends WebSecurityConfigurerAdapter {
@@ -537,6 +536,216 @@ public interface Authentication extends Principal, Serializable {
       }
   ```
 
+## section 07: Understanding & Implementing Authroization
+|comparison|Authentication|Authroization|
+|---|---|---|
+|What is checked?|the identity of users are checked for providing the access to the system.|user’s authorities are checked for accessing the resources.
+|When happened?|done before authorization|always happens after authentication.
+|What information are needed?|user’s login details|user’s privilege or roles
+|failure|401 response|403 response
 
+### authentication & authorization internal flow in spring
+- <img src="./imgs/9.png" width="90%"/>
+
+    1. When the Client makes a request with the credentials, 
+        - the authentication filter will intercept the request and 
+        - validate if the person is valid and is he/she the same person whom they are claiming.
+    2. Post authentication 
+        - the filter stores the **<u>UserDetails</u>** in the SecurityContext. 
+            - The UserDetails will have his username, authorities etc 
+    3. Now the authorization filter will intercept and 
+        - decide whether the person has access to the given path based on this authorities stored in the SecurityContext 
+    4. If authorized 
+        - the request will be forwarded to the applicable controllers
+
+### How authority/role stored in spring security
+```java
+public interface UserDetails extends Serializable {
+	/**
+	 * Returns the authorities granted to the user. Cannot return null.
+	 */
+	Collection<? extends GrantedAuthority> getAuthorities();
+
+    ...
+}
+
+public class SecurityCustomer implements UserDetails {
+    // a DB model
+    private final Customer customer; // a customer has a list of authority
+
+	public SecurityCustomer(Customer customer) {
+		this.customer = customer;
+	}
+
+	@Override
+	public Collection<? extends GrantedAuthority> getAuthorities() {
+		List<GrantedAuthority> authorities = new ArrayList<>();
+		authorities.add(new SimpleGrantedAuthority(customer.getRole()));
+		return authorities;
+	}
+
+	@Override
+	public String getPassword() {
+		return customer.getPwd();
+	}
+
+	@Override
+	public String getUsername() {
+		return customer.getEmail();
+	}
+
+	@Override
+	public boolean isAccountNonExpired() {
+		return true;
+	}
+
+	@Override
+	public boolean isAccountNonLocked() {
+		return true;
+	}
+
+	@Override
+	public boolean isCredentialsNonExpired() {
+		return true;
+	}
+
+	@Override
+	public boolean isEnabled() {
+		return true;
+	}
+}
+```
+
+```java
+/**
+ * Represents an authority granted to an {@link Authentication} object.
+ */
+public interface GrantedAuthority extends Serializable {
+	/**
+     * @return a representation of the granted authority (or null if the
+	 * granted authority cannot be expressed as a String with sufficient
+	 * precision).
+	 */
+	String getAuthority();
+}
+
+/**
+ * Basic concrete implementation of a GrantedAuthority
+ *
+ * Stores a String representation of an authority granted to the Authentication object.
+ */
+public final class SimpleGrantedAuthority implements GrantedAuthority {
+    private final String role;
+
+	public SimpleGrantedAuthority(String role) {
+		Assert.hasText(role, "A granted authority textual representation is required");
+		this.role = role;
+	}
+
+	@Override
+	public String getAuthority() {
+		return role;
+	}
+
+    ...
+}
+```
+
+### authority v.s. role
+|authority|role|
+|---|---|
+|like an individual privilege|is a group of privileges
+|Restricting access in a fine grained manner|Restricting access in a coarse grained manner
+|Ex: READ, UPDATE, DELETE|Ex: ROLE_ADMIN, ROLE_USER
+
+### configure authorization by authority in spring security
+```java
+@Configuration
+public class ProjectSecurityConfig extends WebSecurityConfigurerAdapter {
+    @Override
+	protected void configure(HttpSecurity http) throws Exception {
+
+		http.cors().configurationSource(new CorsConfigurationSource() {
+			@Override
+			public CorsConfiguration getCorsConfiguration(HttpServletRequest request) {
+				CorsConfiguration config = new CorsConfiguration();
+				config.setAllowedOrigins(Collections.singletonList("http://localhost:4200"));
+				config.setAllowedMethods(Collections.singletonList("*"));
+				config.setAllowCredentials(true);
+				config.setAllowedHeaders(Collections.singletonList("*"));
+				config.setMaxAge(3600L);
+				return config;
+			}
+		}).and().csrf().ignoringAntMatchers("/contact").csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+				.and().authorizeRequests()
+				.antMatchers("/myAccount").hasAuthority("WRITE")
+				.antMatchers("/myBalance").hasAuthority("READ")
+				.antMatchers("/myLoans").hasAuthority("DELETE")
+				.antMatchers("/myCards").authenticated() // user who has authenticated without considering any roles
+				.antMatchers("/user").authenticated()
+				.antMatchers("/notices").permitAll()
+				.antMatchers("/contact").permitAll().and().httpBasic();
+	}
+
+    ...
+}
+```
+|||
+|---|---|
+|hasAuthority()|Accepts a single authority for which the endpoint will be configured and user will be validated against the single authority mentioned. Only users having the same authority configured can call the endpoint.
+|hasAnyAuthority()|Accepts multiple authorities for which the endpoint will be configured and user will be validated against the authorities mentioned. Only users having any of the authority configured can call the endpoint.
+|access()|Using Spring Expression Language (SpEL) it provides you unlimited possibilities for configuring authorities which are not possible with the above methods. We can use operators like OR, AND inside access() method.
+
+### configure authorization by role in spring security
+```java
+@Configuration
+public class ProjectSecurityConfig extends WebSecurityConfigurerAdapter {
+    @Override
+	protected void configure(HttpSecurity http) throws Exception {
+
+		http.cors().configurationSource(new CorsConfigurationSource() {
+			@Override
+			public CorsConfiguration getCorsConfiguration(HttpServletRequest request) {
+				CorsConfiguration config = new CorsConfiguration();
+				config.setAllowedOrigins(Collections.singletonList("http://localhost:4200"));
+				config.setAllowedMethods(Collections.singletonList("*"));
+				config.setAllowCredentials(true);
+				config.setAllowedHeaders(Collections.singletonList("*"));
+				config.setMaxAge(3600L);
+				return config;
+			}
+		}).and().csrf().ignoringAntMatchers("/contact").csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+				.and().authorizeRequests()
+				.antMatchers("/myAccount").hasRole("USER")
+				.antMatchers("/myBalance").hasAnyRole("USER","ADMIN")
+				.antMatchers("/myLoans").hasRole("ROOT")
+				.antMatchers("/myCards").authenticated() // user who has authenticated without considering any roles
+				.antMatchers("/user").authenticated()
+				.antMatchers("/notices").permitAll()
+				.antMatchers("/contact").permitAll().and().httpBasic();
+	}
+```
+
+|||
+|---|---|
+|hasRole()| Accepts a single role name for which the endpoint will be configured and user will be validated against the single role mentioned. Only users having the same role configured can call the endpoint.
+|hasAnyRole()|Accepts multiple roles for which the endpoint will be configured and user will be validated against the roles mentioned. Only users having any of the role configured can call the endpoint.
+|access()| Using Spring Expression Language (SpEL) it provides you unlimited possibilities for configuring roles which are not possible with the above methods. We can use operators like OR, AND inside access() method.
+
+> Note: role in spring are automatically concatnated prefix with "ROLE_" + myRoleString to distinguish role between authority because both of them are using GrantedAuthority in Spring Security.
+
+
+### matcher in spring
+- http.authorizeRequests()
+
+1) .mvcMatchers([optional] HttpMethod.GET, patternString) uses Spring MVC's HandlerMappingIntrospector to match the path and extract variables.
+
+2) .antMatchers([optional] HttpMethod.GET, patternString) is an implementation for Ant-style path patterns. Part of this mapping code has been kindly borrowed from Apache Ant.
+
+3) .regexMatchers([optional] HttpMethod.GET, ".*/en|es|zh") can be used to represent any format of a string, so they offer unlimited possibilities for configuring endpoints security.
+
+> Note : Generally mvcMatcher is more secure than an antMatcher . As an example
+<br/>antMatchers("/secured") matches : /secured
+<br/>mvcMatchers("/secured") matches : /secured as well as /secured/, /secured.html, /secured.xyz
 
 
