@@ -887,7 +887,70 @@ public class AuthenticationFilter extends OncePerRequestFilter {
 }
 ```
 
+## section 09: Token based authentication using JSON Web Token (JWT)
+### Advantages of Token based Authentication
+- Token helps us not to share the credentials for every request which is a security risk to make credentials send over
+the network frequently.
+- Tokens can be invalidated during any suspicious activities without invalidating the user credentials.
+- Tokens can be created with a short life span.
+- Tokens can be used to store the user related information like roles/authorities etc.
+- Reusability We can have many separate servers, running on multiple platforms and domains, reusing the same token for authenticating the user.
+- Security Since we are not using cookies, we don’t have to protect against cross site request forgery (CSRF) attacks.
+- Stateless, easier to scale. The token contains all the information to identify the user, eliminating the need for the session state. If we use a load balancer, we can pass the user to any server, instead of being bound to the same server we logged in on.
 
+### What is JWT?
+- a token implementation which will be in the JSON format and designed to use for the web requests.
+- can be used both in the scenarios of Authorization/Authentication along with Information exchange
+    - which means you can share certain user related data in the token itself which will reduce the burden of maintaining such details in the sessions on the server side.
+        - > only checking jwt token each time received rather than retriving crediential from DB
+- A JWT token has 3 parts each separated by a dot(.). Below is a sample JWT token:
+    - <img src="./imgs/12.png" width="70%"/>
+    - <img src="./imgs/13.png" width="70%"/>
+    - signature can be calculated by:
+        - HMAC_SHA256(base64UrlEncode(header) + "." + base64UrlEncode(payload), secret)
+- [jwt.io](jwt.io): jwt encoding and decoding
+
+### how to configure JWT setup
+```java
+@Configuration
+public class ProjectSecurityConfig extends WebSecurityConfigurerAdapter {
+    @Override
+	protected void configure(HttpSecurity http) throws Exception {
+        // JWT does not require a session
+		http.sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS).and().
+		// configure Authorization for CORS
+        cors().configurationSource(new CorsConfigurationSource() {
+			@Override
+			public CorsConfiguration getCorsConfiguration(HttpServletRequest request) {
+				CorsConfiguration config = new CorsConfiguration();
+				config.setAllowedOrigins(Collections.singletonList("http://localhost:4200"));
+				config.setAllowedMethods(Collections.singletonList("*"));
+				config.setAllowCredentials(true);
+				config.setAllowedHeaders(Collections.singletonList("*"));
+				config.setExposedHeaders(Arrays.asList("Authorization"));
+				config.setMaxAge(3600L);
+				return config;
+			}
+		}).and().csrf().disable() // disable CSRF because we do not need it
+				.addFilterBefore(new RequestValidationBeforeFilter(), BasicAuthenticationFilter.class) // check JWT received is valid
+				.addFilterBefore(new JWTTokenValidatorFilter(),       BasicAuthenticationFilter.class) // check signature matches
+                    // create UsernamePasswordAuthenticationToken from JWT as Authentication and stored in SecurityContextHolder.getContext()
+				.addFilterAt(    new AuthoritiesLoggingAtFilter(),    BasicAuthenticationFilter.class) // log: Authentication Validation is in progress
+				.addFilterAfter( new JWTTokenGeneratorFilter(),       BasicAuthenticationFilter.class) // generate JWT if first time visited
+				.addFilterAfter( new AuthoritiesLoggingAfterFilter(), BasicAuthenticationFilter.class) // log: successful authentication + authorization roles
+				.authorizeRequests()
+				.antMatchers("/myAccount").hasRole("USER")
+				.antMatchers("/myBalance").hasAnyRole("USER","ADMIN")
+				.antMatchers("/myLoans").hasRole("ROOT")
+				.antMatchers("/myCards").hasAnyRole("USER","ADMIN")
+				.antMatchers("/user").authenticated()
+				.antMatchers("/notices").permitAll()
+				.antMatchers("/contact").permitAll().and().httpBasic();
+	}
+
+    ...
+}
+```
 
 
 
