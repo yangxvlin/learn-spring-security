@@ -16,6 +16,50 @@
     - [section 4: Password Management with PasswordEncoders](#section-4-password-management-with-passwordencoders)
         - [PasswordEncoder](#passwordencoder)
     - [section 5: Understanding Authentication Provider and Implementing it](#section-5-understanding-authentication-provider-and-implementing-it)
+        - [AuthenticationProvider interface and its implementation](#authenticationprovider-interface-and-its-implementation)
+        - [customized AuthenticationProvider](#customized-authenticationprovider)
+        - [AuthenticationManager interface and its implementation](#authenticationmanager-interface-and-its-implementation)
+        - [Principal & Authentication interface](#principal--authentication-interface)
+    - [section 06: CORS & CSRF](#section-06-cors--csrf)
+        - [CROSS ORIGIN RESOURCE SHARING (CORS)](#cross-origin-resource-sharing-cors)
+            - [How to enable CORS?](#how-to-enable-cors)
+        - [CROSS SITE REQUEST FORGERY (CSRF)](#cross-site-request-forgery-csrf)
+            - [How to defend CSRF?](#how-to-defend-csrf)
+    - [section 07: Understanding & Implementing Authroization](#section-07-understanding--implementing-authroization)
+        - [authentication & authorization internal flow in spring](#authentication--authorization-internal-flow-in-spring)
+        - [How authority/role stored in spring security](#how-authorityrole-stored-in-spring-security)
+        - [authority v.s. role](#authority-vs-role)
+        - [configure authorization by authority in spring security](#configure-authorization-by-authority-in-spring-security)
+        - [configure authorization by role in spring security](#configure-authorization-by-role-in-spring-security)
+        - [matcher in spring](#matcher-in-spring)
+    - [section 08: filters in Spring Security](#section-08-filters-in-spring-security)
+        - [Enable filter debug mode](#enable-filter-debug-mode)
+        - [default filter chain for spring security authentication flow](#default-filter-chain-for-spring-security-authentication-flow)
+        - [customized filter](#customized-filter)
+        - [configure the filter order in the filter chain](#configure-the-filter-order-in-the-filter-chain)
+        - [other builtin filter](#other-builtin-filter)
+    - [section 09: Token based authentication using JSON Web Token (JWT)](#section-09-token-based-authentication-using-json-web-token-jwt)
+        - [Advantages of Token based Authentication](#advantages-of-token-based-authentication)
+        - [What is JWT?](#what-is-jwt)
+        - [how to configure JWT setup](#how-to-configure-jwt-setup)
+    - [section 10: method level security](#section-10-method-level-security)
+        - [why do we need it?](#why-do-we-need-it)
+        - [how to configure it?](#how-to-configure-it)
+        - [Invocation authorization](#invocation-authorization)
+            - [how to use](#how-to-use)
+        - [Filtering authorization](#filtering-authorization)
+            - [when to use](#when-to-use)
+            - [how to use](#how-to-use)
+    - [section 11: oauth 2.0](#section-11-oauth-20)
+        - [why need it?](#why-need-it)
+        - [oauth 2.0 components](#oauth-20-components)
+        - [oauth 2.0 flow](#oauth-20-flow)
+            - [Authorization code grant type](#authorization-code-grant-type)
+            - [Implicit grant type](#implicit-grant-type)
+            - [Resource owner credientials grant type](#resource-owner-credientials-grant-type)
+            - [Client credientials grant type](#client-credientials-grant-type)
+            - [Refresh token grant type](#refresh-token-grant-type)
+        - [How does resource server validate received token?](#how-does-resource-server-validate-received-token)
 
 <!-- /TOC -->
 ## resource
@@ -951,6 +995,161 @@ public class ProjectSecurityConfig extends WebSecurityConfigurerAdapter {
     ...
 }
 ```
+
+## section 10: method level security
+### why do we need it?
+apply the authorization rules at any layer of an application like in service layer or repository layer etc.
+### how to configure it?
+```java
+@Configuration
+@EnableGlobalMethodSecurity(prePostEnabled = true,securedEnabled = true,  jsr250Enabled = true)
+public class ProjectSecurityConfig extends WebSecurityConfigurerAdapter {
+}
+```
+|||
+|---|---|
+|prePostEnabled|enables Spring Security @PreAuthorize & @PostAuthorize annotations
+|securedEnabled|enables @Secured annotation
+|jsr250Enabled|enables @RoleAllowed annotation
+- @Secured and @RoleAllowed are less powerful compared to @PreAuthorize and @PostAuthorize
+
+### Invocation authorization
+- Validates if someone can invoke a method or not based on their roles/authorities.
+#### how to use
+```java
+@Service
+public class LoanService {
+    @PreAuthorize("hasAuthority('admin')");
+    @PreAuthorize("hasRole('admin')");
+    @PreAuthorize("hasAnyRole('admin')");
+    @PreAuthorize("# username == authentication.principal.username");
+    @PreAuthorize("hasPermission(returnObject, 'admin')");
+    public Loan getLoanDetails(String username) {
+        return loanRepository.loadLoanByUserName(username);
+    }
+
+@Service
+public class LoanService {
+    @PostAuthorize("returnObject.username == authentication.principal.username");
+    @PostAuthorize("hasPermission(returnObject, 'admin')");
+    public Loan getLoanDetails(String username) {
+        return loanRepository.loadLoanByUserName(username);
+    }
+```
+
+> When implementing complex authorization logic, we can separate the logic using a separate class that implements `PermissionEvaluator` and overwrite the method `hasPermission()` inside it which can be leveraged inside the hasPermission configurations.
+### Filtering authorization
+- Validates what a method can receive through its parameters and what the invoker can receive back from the method post business logic execution.
+#### when to use
+- If we have a scenario where we don’t want to control the invocation of the method `but` we want to make sure that the parameters sent and received to/from the method need to follow authorization rules,
+    - then we can consider filtering.
+#### how to use
+```java
+@Service
+public class LoanService {
+    @PreFilter("filterObject.username == authentication.principal.username")
+    public Loan updateLoanDetails(Loan loan) {
+        // business logic
+        return loan;
+    }
+}
+
+@Service
+public class LoanService {
+    @PostFilter("filterObject.username == authentication.principal.username")
+    public Loan getLoanDetails() {
+        // business logic
+        return loans;
+    }
+}
+```
+> We can use the @PostFilter on the Spring Data repository methods as well to filter any unwanted data coming from the database.
+
+
+## section 11: oauth 2.0
+### why need it?
+1. client do not need to send crediential each time. and authentication logic does not need to be extended each time for each request
+2. authentication and authorization logic can be maintained in different place
+### oauth 2.0 components
+|||
+|---|---|
+|The Resource Server|where the protected resources owned by user (e.g.: photos, personal information, transactions etc.)
+|The user (aka resource owner)|The person who owns resources exposed by the resource server.<br/>- Usually the user will prove his identity with the help of username and password.
+|The client|The application that want to access the resources owned by the user on their behalf.<br/>- The client uses a client id and secret to identify itself (different from credentials).
+|The authorization server|The server that authorizes the client to access the user resources in the resource server.<br/>- When the authorization server identifies that a client is authorized to access a resource on behalf of the user, it issues a token. The client application uses this token to prove to the resource server that it was authorized by the authorization server. The resource server allows the client to access the resource it requested if it has a valid token after validating the same with Auth server.
+
+### oauth 2.0 flow
+#### Authorization code grant type
+- <img src="./imgs/14.png" width="70%"/>
+- step 3: sending below
+    |||
+    |---|---|
+    |client_id|the id which identifies the client application by the Auth Server. <br/>- This will be granted when the client register first time with the Auth server.
+    |redirect_uri|the URI value which the Auth server needs to redirect post successful authentication. <br/>- If a default value is provided during the registration then this value is optional
+    |scope|similar to authorities. Specifies level of access that client is requesting like READ
+    |state|CSRF token value to protect from CSRF attacks
+    |response_type|With the value ‘**<u>code</u>**’ which indicates that we want to follow authorization code grant type
+- step 5: sending for the token in response
+    |||
+    |---|---|
+    |code|the authorization code received from the above steps
+    |client_id & client_secret|the client credentials which are registered with the auth server. Please note that these are not user credentials (username + pwd)
+    |grant_type|With the value ‘**<u>authorization_code</u>**’ which identifies the kind of grant type is used
+    |redirect_uri
+> Why not combine step 3 & 5 in one step?<br/>- will make it less secure
+#### Implicit grant type
+- <img src="./imgs/15.png" width="70%"/>
+- step 3: sending below
+    |||
+    |---|---|
+    |client_id|the id which identifies the client application by the Auth Server. <br/>- This will be granted when the client register first time with the Auth server.
+    |redirect_uri|the URI value which the Auth server needs to redirect post successful authentication. <br/>- If a default value is provided during the registration then this value is optional
+    |scope|similar to authorities. Specifies level of access that client is requesting like READ
+    |state|CSRF token value to protect from CSRF attacks
+    |response_type|With the value ‘**<u>token</u>**’ which indicates that we want to follow implicit grant type
+
+> If the user approves the request, the authorization server will redirect the browser back to the redirect_uri specified by the application, adding a token and state to the fragment part of the URL. For example, the user will be redirected back to a URL such as
+<br/>https://example-app.com/redirect#access_token=xMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiY&token_type=Bearer&expires_in=600&state=80bvIn4pUfdSxr6UTjtay8Yzg9ZiAkCzKNwy
+
+#### Resource owner credientials grant type
+- <img src="./imgs/16.png" width="70%"/>
+- step 2: sending below
+    |||
+    |---|---|
+    |client_id & client_secret|the credentials of the client to authenticate itself.
+    |scope|similar to authorities. Specifies level of access that client is requesting like READ
+    |username & password|Credentials provided by the user in the login flow
+    |grant_type|With the value ‘**<u>password</u>**’ which indicates that we want to follow password grant type
+> • We use this authentication flow only if the <u>client, authorization server and resource servers are maintained by the same organization</u>.<br/>
+• This flow will be usually followed by the enterprise applications who want to separate the Auth flow and business flow. Once the Auth flow is separated different applications in the same organization can leverage it. <br/>
+• We can’t use the Authorization code grant type since it won’t look nice for the user to redirect multiple pages inside your organization for authentication.
+
+#### Client credientials grant type
+- <img src="./imgs/17.png" width="50%"/>
+- step 1: sending below
+    |||
+    |---|---|
+    |client_id & client_secret|the credentials of the client to authenticate itself.
+    |scope|similar to authorities. Specifies level of access that client is requesting like READ
+    |grant_type|With the value ‘**<u>client_credentials</u>**’ which indicates that we want to follow client credentials grant type
+> We use this authentication flow only if <u>there is no user and UI involved</u>. Like in the scenarios where 2 different applications want to share data between them using backend APIs.
+
+#### Refresh token grant type
+- <img src="./imgs/18.png" width="60%"/>
+- step 3: sending below
+    |||
+    |---|---|
+    |client_id & client_secret|the credentials of the client to authenticate itself.
+    |refresh_token|the value of the refresh token received initially
+    |scope|similar to authorities. Specifies level of access that client is requesting like READ
+    |grant_type|With the value ‘**<u>refresh_token</u>**’ which indicates that we want to follow refresh token grant type
+
+> This flow will be used in the scenarios where the access token of the user is expired. Instead of asking the user to login again and again, we can use the refresh token which originally provided by the Authz server to reauthenticate the user.
+
+### How does resource server validate received token?
+- <img src="./imgs/19.png" width="60%"/>
+- <img src="./imgs/20.png" width="60%"/>
+- <img src="./imgs/21.png" width="60%"/>
 
 
 
