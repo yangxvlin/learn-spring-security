@@ -55,11 +55,17 @@
         - [oauth 2.0 components](#oauth-20-components)
         - [oauth 2.0 flow](#oauth-20-flow)
             - [Authorization code grant type](#authorization-code-grant-type)
+                - [Authorization code grant type With Proof Key Code Exchange (PKCE)](#authorization-code-grant-type-with-proof-key-code-exchange-pkce)
             - [Implicit grant type](#implicit-grant-type)
             - [Resource owner credientials grant type](#resource-owner-credientials-grant-type)
             - [Client credientials grant type](#client-credientials-grant-type)
             - [Refresh token grant type](#refresh-token-grant-type)
         - [How does resource server validate received token?](#how-does-resource-server-validate-received-token)
+    - [section 13](#section-13)
+        - [How to use Keycloak](#how-to-use-keycloak)
+        - [Open ID Connect (OIDC)](#open-id-connect-oidc)
+            - [What is OpenID Connect?](#what-is-openid-connect)
+            - [Why need OIDC?](#why-need-oidc)
 
 <!-- /TOC -->
 ## resource
@@ -1096,7 +1102,18 @@ public class LoanService {
     |client_id & client_secret|the client credentials which are registered with the auth server. Please note that these are not user credentials (username + pwd)
     |grant_type|With the value ‘**<u>authorization_code</u>**’ which identifies the kind of grant type is used
     |redirect_uri
-> Why not combine step 3 & 5 in one step?<br/>- will make it less secure
+> Why not combine step 3 & 5 in one step?<br/>- will make it less secure, Implicit grant type does this.
+
+##### Authorization code grant type With Proof Key Code Exchange (PKCE)
+- solves the problem of <u>public clients cannot securely store a Client Secret.</u>
+- <img src="./imgs/24.jpg" width="70%"/>
+1. Once user clicks login, client app creates a cryptographically-random `code_verifier` and from this generates a `code_challenge`.
+2. Redirects the user to the Authorization Server alongwith the `code_challenge`.
+3. Authorization Server stores the `code_challenge` and redirects the user back to the application with an authorization code, which is good for one use.
+4. Client App sends the authorization code and the `code_verifier`(created in step 1) to the Authorization Server.
+5. Authorization Server verifies the `code_challenge` and `code_verifier`. If they are valid it responds with ID Token and Access Token (and optionally, a Refresh Token).
+
+
 #### Implicit grant type
 - <img src="./imgs/15.png" width="70%"/>
 - step 3: sending below
@@ -1151,5 +1168,21 @@ public class LoanService {
 - <img src="./imgs/20.png" width="60%"/>
 - <img src="./imgs/21.png" width="60%"/>
 
+## section 13
+
+### How to use Keycloak
+- https://github.com/yangxvlin/my-auth
 
 
+### Open ID Connect (OIDC)
+- <img src="./imgs/22.png" width="60%"/>
+#### What is OpenID Connect?
+- is a protocol that sits on top of the OAuth 2.0 framework. 
+    - <img src="./imgs/23.png" width="20%"/>
+- While OAuth 2.0 provides authorization via an access token containing scopes, OpenID Connect provides authentication by introducing a new ID token which contains a new set of scopes and claims specifically for identity.
+- With the ID token, OpenID Connect brings standards around sharing identity details among the applications.
+#### Why need OIDC?
+- OpenID Connect add below details to OAuth 2.0
+    1. OIDC standardizes the scopes to openid, profile, email, and address.
+    2. ID Token using JWT standard
+    3. OIDC exposes the standardized “/userinfo” endpoint.
